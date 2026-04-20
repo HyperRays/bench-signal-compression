@@ -222,33 +222,30 @@ def run_benchmark_split_wallclock(
     workers: int,
     chunked: bool,
     chunk_size: int,
+    decompress_only: bool = True,
 ) -> Dict[str, float]:
-    """Measure wall-clock time for compression and decompression separately."""
+    """Measure wall-clock time for decompression (and compression, if requested)."""
     total_samples = sum(len(s) for s in signals)
     raw_mb = sum(s.nbytes for s in signals) / 1e6
 
     ctx = mp.get_context("spawn")
 
-    # --- Compression pass ---
+    # --- Compression pass (timing discarded when decompress_only) ---
+    t0 = time.perf_counter()
     if workers == 1:
-        t0 = time.perf_counter()
         if chunked:
             compressed = [vbz_compress_signal_chunked(s, chunk_size) for s in signals]
         else:
             compressed = [vbz_compress_signal(s) for s in signals]
-        wall_compress = time.perf_counter() - t0
     else:
         if chunked:
             work = [(s, chunk_size) for s in signals]
-            t0 = time.perf_counter()
             with ctx.Pool(processes=workers) as pool:
                 compressed = pool.starmap(vbz_compress_signal_chunked, work)
-            wall_compress = time.perf_counter() - t0
         else:
-            t0 = time.perf_counter()
             with ctx.Pool(processes=workers) as pool:
                 compressed = pool.map(vbz_compress_signal, signals)
-            wall_compress = time.perf_counter() - t0
+    wall_compress = None if decompress_only else (time.perf_counter() - t0)
 
     # Calculate compressed size
     if chunked:
@@ -293,7 +290,11 @@ def run_benchmark_split_wallclock(
         "ratio": ratio,
         "wall_compress_s": wall_compress,
         "wall_decompress_s": wall_decompress,
-        "compress_mbps": raw_mb / wall_compress if wall_compress > 0 else float("inf"),
+        "compress_mbps": (
+            None if wall_compress is None
+            else raw_mb / wall_compress if wall_compress > 0
+            else float("inf")
+        ),
         "decompress_mbps": raw_mb / wall_decompress if wall_decompress > 0 else float("inf"),
     }
 
@@ -309,37 +310,59 @@ def print_result(result: Dict[str, float], mode: str, chunk_size: int) -> None:
     print(f"  Raw size:                 {result['raw_mb']:.2f} MB")
     print(f"  Compressed size:          {result['compressed_mb']:.2f} MB")
     print(f"  Compression ratio:        {result['ratio']:.2f}x")
-    print(f"  Compress wall time:       {result['wall_compress_s']:.3f} s")
+    if result["wall_compress_s"] is not None:
+        print(f"  Compress wall time:       {result['wall_compress_s']:.3f} s")
     print(f"  Decompress wall time:     {result['wall_decompress_s']:.3f} s")
-    print(f"  Compression throughput:   {result['compress_mbps']:.1f} MB/s")
+    if result["compress_mbps"] is not None:
+        print(f"  Compression throughput:   {result['compress_mbps']:.1f} MB/s")
     print(f"  Decompression throughput: {result['decompress_mbps']:.1f} MB/s")
 
 
 def print_sweep_table(results: List[Dict[str, float]]) -> None:
     """Print a summary table for a sweep across worker counts."""
-    print(f"\n{'Workers':>8} {'Ratio':>8} {'Comp MB/s':>11} {'Decomp MB/s':>13} "
-          f"{'Comp Wall(s)':>13} {'Decomp Wall(s)':>15}")
-    print("-" * 72)
-    for r in results:
-        print(
-            f"{r['workers']:>8d} "
-            f"{r['ratio']:>8.2f} "
-            f"{r['compress_mbps']:>11.1f} "
-            f"{r['decompress_mbps']:>13.1f} "
-            f"{r['wall_compress_s']:>13.3f} "
-            f"{r['wall_decompress_s']:>15.3f}"
-        )
+    decompress_only = results[0]["wall_compress_s"] is None
+
+    if decompress_only:
+        print(f"\n{'Workers':>8} {'Ratio':>8} {'Decomp MB/s':>13} {'Decomp Wall(s)':>15}")
+        print("-" * 48)
+        for r in results:
+            print(
+                f"{r['workers']:>8d} "
+                f"{r['ratio']:>8.2f} "
+                f"{r['decompress_mbps']:>13.1f} "
+                f"{r['wall_decompress_s']:>15.3f}"
+            )
+    else:
+        print(f"\n{'Workers':>8} {'Ratio':>8} {'Comp MB/s':>11} {'Decomp MB/s':>13} "
+              f"{'Comp Wall(s)':>13} {'Decomp Wall(s)':>15}")
+        print("-" * 72)
+        for r in results:
+            print(
+                f"{r['workers']:>8d} "
+                f"{r['ratio']:>8.2f} "
+                f"{r['compress_mbps']:>11.1f} "
+                f"{r['decompress_mbps']:>13.1f} "
+                f"{r['wall_compress_s']:>13.3f} "
+                f"{r['wall_decompress_s']:>15.3f}"
+            )
 
     # Speedup relative to single-worker
     if len(results) > 1:
-        base_comp = results[0]["wall_compress_s"]
         base_decomp = results[0]["wall_decompress_s"]
-        print(f"\n{'Workers':>8} {'Comp Speedup':>13} {'Decomp Speedup':>15}")
-        print("-" * 40)
-        for r in results:
-            comp_speedup = base_comp / r["wall_compress_s"] if r["wall_compress_s"] > 0 else 0
-            decomp_speedup = base_decomp / r["wall_decompress_s"] if r["wall_decompress_s"] > 0 else 0
-            print(f"{r['workers']:>8d} {comp_speedup:>13.2f}x {decomp_speedup:>15.2f}x")
+        if decompress_only:
+            print(f"\n{'Workers':>8} {'Decomp Speedup':>15}")
+            print("-" * 26)
+            for r in results:
+                decomp_speedup = base_decomp / r["wall_decompress_s"] if r["wall_decompress_s"] > 0 else 0
+                print(f"{r['workers']:>8d} {decomp_speedup:>15.2f}x")
+        else:
+            base_comp = results[0]["wall_compress_s"]
+            print(f"\n{'Workers':>8} {'Comp Speedup':>13} {'Decomp Speedup':>15}")
+            print("-" * 40)
+            for r in results:
+                comp_speedup = base_comp / r["wall_compress_s"] if r["wall_compress_s"] > 0 else 0
+                decomp_speedup = base_decomp / r["wall_decompress_s"] if r["wall_decompress_s"] > 0 else 0
+                print(f"{r['workers']:>8d} {comp_speedup:>13.2f}x {decomp_speedup:>15.2f}x")
 
 
 def main():
@@ -390,6 +413,11 @@ def main():
         "--verbose",
         action="store_true",
         help="Print per-read statistics (single-worker only)",
+    )
+    parser.add_argument(
+        "--include-compress",
+        action="store_true",
+        help="Also benchmark compression (default: decompression only)",
     )
     args = parser.parse_args()
 
@@ -449,7 +477,8 @@ def main():
     for wc in worker_counts:
         print(f"\nBenchmarking {mode} compression with {wc} worker(s)...")
         result = run_benchmark_split_wallclock(
-            signals, wc, args.chunked, args.chunk_size
+            signals, wc, args.chunked, args.chunk_size,
+            decompress_only=not args.include_compress,
         )
         all_results.append(result)
 

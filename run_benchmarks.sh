@@ -19,7 +19,7 @@ DATASETS=(
 # Extra args forwarded to the benchmark (override by passing on the command line).
 BENCH_ARGS=("$@")
 if [ ${#BENCH_ARGS[@]} -eq 0 ]; then
-    BENCH_ARGS=(--sweep 1,2,4,8 --chunked)
+    BENCH_ARGS=(--sweep 16,32 --chunked)
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
