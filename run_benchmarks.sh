@@ -1,4 +1,13 @@
-#!/usr/bin/env bash
+#!/bin/bash
+#SBATCH --job-name=vbz-bench
+#SBATCH --output=vbz-bench-%j.out
+#SBATCH --error=vbz-bench-%j.err
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=60G
+#SBATCH --time=02:00:00
+#SBATCH --partition=bio_part
+
 set -euo pipefail
 
 # dataset_label:fast5_dir pairs
