@@ -57,19 +57,31 @@ def find_fast5_files(path: Path) -> List[Path]:
 def extract_signals_from_fast5(
     path: Path, max_reads: int
 ) -> List[npt.NDArray[np.int16]]:
-    """Extract raw signal arrays from a multi-read fast5 file."""
+    """Extract raw signal arrays from a fast5 file (multi-read or single-read)."""
     signals = []
     with h5py.File(str(path), "r") as f:
-        for key in f.keys():
-            if not key.startswith("read_"):
-                continue
-            try:
-                signal = f[key]["Raw"]["Signal"][()]
-                signals.append(signal.astype(np.int16))
-            except KeyError:
-                continue
-            if max_reads > 0 and len(signals) >= max_reads:
-                break
+        if "Raw" in f and "Reads" in f["Raw"]:
+            # Single-read layout: /Raw/Reads/Read_<N>/Signal
+            for read_name in f["Raw"]["Reads"]:
+                try:
+                    signal = f["Raw"]["Reads"][read_name]["Signal"][()]
+                    signals.append(signal.astype(np.int16))
+                except KeyError:
+                    continue
+                if max_reads > 0 and len(signals) >= max_reads:
+                    break
+        else:
+            # Multi-read layout: /read_<uuid>/Raw/Signal
+            for key in f.keys():
+                if not key.startswith("read_"):
+                    continue
+                try:
+                    signal = f[key]["Raw"]["Signal"][()]
+                    signals.append(signal.astype(np.int16))
+                except KeyError:
+                    continue
+                if max_reads > 0 and len(signals) >= max_reads:
+                    break
     return signals
 
 
