@@ -32,5 +32,5 @@ for entry in "${DATASETS[@]}"; do
     echo "# Dataset: $label"
     echo "# Path:    $path"
     echo "############################################################"
-    python3 "$SCRIPT_DIR/bench_signal_compression.py" "$path" "${BENCH_ARGS[@]}"
+    python3 "./bench_signal_compression.py" "$path" "${BENCH_ARGS[@]}"
 done
