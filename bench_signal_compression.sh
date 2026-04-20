@@ -6,6 +6,7 @@
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=60G
 #SBATCH --time=02:00:00
+#SBATCH --partition=bio_part
 
 # ── Configuration ────────────────────────────────────────────────────
 # Override these via environment or edit directly:
