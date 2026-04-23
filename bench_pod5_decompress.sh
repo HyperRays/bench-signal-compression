@@ -31,7 +31,6 @@ SKIP_PREWARM="${SKIP_PREWARM:-0}"
 # conda activate pod5-env
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONVERT_THREADS="${CONVERT_THREADS:-${SLURM_CPUS_PER_TASK:-8}}"
 
 mkdir -p "${POD5_CACHE}"
 
@@ -45,15 +44,13 @@ echo "Warmup:         ${WARMUP}"
 echo "Repeats:        ${REPEATS}"
 echo "Skip prewarm:   ${SKIP_PREWARM}"
 echo "Pod5 cache:     ${POD5_CACHE}"
-echo "Convert threads:${CONVERT_THREADS}"
 echo "Datasets:"
 for entry in "${DATASETS[@]}"; do
     echo "  - ${entry}"
 done
 echo "============================================"
 
-POD5_CLI=(python3 -m pod5.tools.main)
-"${POD5_CLI[@]}" --help >/dev/null 2>&1 || { echo "ERROR: 'python3 -m pod5.tools.main' failed — activate env in this script"; exit 1; }
+python3 -c "import pod5, h5py" || { echo "ERROR: pod5 / h5py not importable — activate env in this script"; exit 1; }
 
 IFS=',' read -ra WORKERS <<< "${SWEEP}"
 
@@ -78,14 +75,10 @@ for entry in "${DATASETS[@]}"; do
     if [ -f "${POD5_FILE}" ]; then
         echo "Using cached pod5: ${POD5_FILE} ($(du -h "${POD5_FILE}" | cut -f1))"
     else
-        echo "Converting fast5 -> pod5 (${CONVERT_THREADS} threads)..."
+        echo "Converting fast5 -> pod5 via ${SCRIPT_DIR}/fast5_to_pod5.py ..."
         t0=$(date +%s)
-        if ! "${POD5_CLI[@]}" convert fast5 \
-                --output "${POD5_FILE}" \
-                --threads "${CONVERT_THREADS}" \
-                --recursive \
-                "${FAST5_DIR}"; then
-            echo "ERROR: pod5 convert failed for ${LABEL}"
+        if ! python3 "${SCRIPT_DIR}/fast5_to_pod5.py" "${FAST5_DIR}" "${POD5_FILE}"; then
+            echo "ERROR: fast5_to_pod5.py failed for ${LABEL}"
             rm -f "${POD5_FILE}"
             continue
         fi
