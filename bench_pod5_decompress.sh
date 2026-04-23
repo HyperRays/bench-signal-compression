@@ -17,7 +17,7 @@ DATASETS=(
 
 # Cache directory for converted pod5 files. Conversion is skipped if the
 # output already exists (delete the file to force reconversion).
-POD5_CACHE="${POD5_CACHE:-${SLURM_SUBMIT_DIR:-$PWD}/pod5_cache}"
+POD5_CACHE="${POD5_CACHE:-./pod5_cache}"
 
 SWEEP="${SWEEP:-8,16,32}"
 WARMUP="${WARMUP:-2}"
@@ -30,7 +30,9 @@ SKIP_PREWARM="${SKIP_PREWARM:-0}"
 # source /path/to/venv/bin/activate
 # conda activate pod5-env
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# SLURM copies the batch script to a spool dir, so $BASH_SOURCE is useless.
+# Use SLURM_SUBMIT_DIR (where sbatch was run) to find the helper scripts.
+SCRIPT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 mkdir -p "${POD5_CACHE}"
 
