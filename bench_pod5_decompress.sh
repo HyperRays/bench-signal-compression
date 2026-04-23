@@ -17,7 +17,7 @@ DATASETS=(
 
 # Cache directory for converted pod5 files. Conversion is skipped if the
 # output already exists (delete the file to force reconversion).
-POD5_CACHE="${POD5_CACHE:-/mnt/nvme1/soysalm/pod5_cache}"
+POD5_CACHE="${POD5_CACHE:-${SLURM_SUBMIT_DIR:-$PWD}/pod5_cache}"
 
 SWEEP="${SWEEP:-8,16,32}"
 WARMUP="${WARMUP:-2}"
